@@ -13,11 +13,6 @@ import tweepy
 from pathlib import Path
 
 # Authentication for Twitter, using env to store
-consumer_key_t = "FupqBIm1jV0fJb4QyTtmqnugd"
-consumer_secret_t = "cTuxZ0wbrRqrREP9bWDTUVaUt5M5o3rhi7ErnVMEWAV0w3PCRg"
-access_token_t = "1511789972860411904-IoStF15gVkR9vKWsZ51pOs18PSKKk6"
-access_token_secret_t = "OhDWMsg3ShXwQOge1U6omw0XuVcy0LToDRdduEWrohJWD"
-bearer_token_t = "AAAAAAAAAAAAAAAAAAAAANjUbAEAAAAAKEhrNCurNfh%2F%2ByFS6qBfiAYBdss%3DFwu6grGwM7OEqqvFP44bywknNZ8AAudAwWh0oM6XyWoKhol9WX"
 
 # Creating the Twitter tweepy connection for V2
 twitter = tweepy.Client(
