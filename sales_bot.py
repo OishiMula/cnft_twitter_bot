@@ -3,34 +3,31 @@
 # All rights reserved.
 # This source code is licensed under the MIT-style license found in the
 # LICENSE file in the root directory of this source tree. 
-import requests
-from ratelimit import limits
-import time
-import os
 import math
+import os
 import pickle
-import tweepy
+import time
 from pathlib import Path
 
-# Authentication for Twitter, using env to store
-consumer_key_t = "FupqBIm1jV0fJb4QyTtmqnugd"
-consumer_secret_t = "cTuxZ0wbrRqrREP9bWDTUVaUt5M5o3rhi7ErnVMEWAV0w3PCRg"
-access_token_t = "1511789972860411904-IoStF15gVkR9vKWsZ51pOs18PSKKk6"
-access_token_secret_t = "OhDWMsg3ShXwQOge1U6omw0XuVcy0LToDRdduEWrohJWD"
-bearer_token_t = "AAAAAAAAAAAAAAAAAAAAANjUbAEAAAAAKEhrNCurNfh%2F%2ByFS6qBfiAYBdss%3DFwu6grGwM7OEqqvFP44bywknNZ8AAudAwWh0oM6XyWoKhol9WX"
+import requests
+import tweepy
+from dotenv import load_dotenv
+from ratelimit import limits
+
+load_dotenv()
 
 # Creating the Twitter tweepy connection for V2
 twitter = tweepy.Client(
-    bearer_token=bearer_token_t,
-    consumer_key=consumer_key_t,
-    consumer_secret=consumer_secret_t,
-    access_token=access_token_t,
-    access_token_secret=access_token_secret_t
+    bearer_token=os.getenv('bearer_token'),
+    consumer_key=os.getenv('consumer_key'),
+    consumer_secret=os.getenv('consumer_secret'),
+    access_token=os.getenv('access_token'),
+    access_token_secret=os.getenv('access_token_secret')
 )
 
 # OpenCNFT endpoint for sales on selected Policy ID
-rtc_sales_endpoint = 'https://api.opencnft.io/1/policy/ec2e1c314ee754cea4ba3afc69f74b2130f87bb3928e1a1e8534c209/transactions?order=date'
-furin_sales_endpoint = 'https://api.opencnft.io/1/policy/2a89138bffea582b621a747015c1c90259d6b4751eeccaa39c4a7dfb/transactions?order=date'
+rtc_sales_endpoint = f"https://api.opencnft.io/1/policy/{os.getenv('rtc_policyid')}/transactions?order=date"
+furin_sales_endpoint = f"https://api.opencnft.io/1/policy/{os.getenv('furin_policyid')}/transactions?order=date"
 ipfs_base = 'https://infura-ipfs.io/ipfs/'
 
 # Creating a first run to see if the file to store last transaciton is made
@@ -63,33 +60,49 @@ def main():
     global running
     global ipfs_base
     while running == True:
-        current_sales = retrieve_sales('rtc')
+        current_sales = retrieve_sales('rtc')['items']
 
+        # Upon starting, it will check for a last_sold csve. If none exist, it will enter the most recent sale to begin the monitor.
         if first_run == True:
             first_run = False
             if last_sold_file.is_file() == False:
-                first_time_dict = {"sold_at" : "0"}
-                pickle.dump(first_time_dict, open('last_sold.dat', 'wb'))
+                pickle.dump(current_sales[0], open('last_sold.dat', 'wb'))
             
-        current_time = current_sales['items'][0]['sold_at']
+        current_time = current_sales[0]['sold_at']
         last_sold_meta = pickle.load(open('last_sold.dat', 'rb'))
+
         if int(current_time) > int(last_sold_meta['sold_at']):
-            pickle.dump(current_sales['items'][0], open('last_sold.dat', 'wb'))
-            asset = current_sales['items'][0]['unit_name']
-            sold_price = int(float(current_sales['items'][0]['price']) / 1000000)
-            asset_mp = current_sales['items'][0]['marketplace']
-            asset_img_raw = current_sales['items'][0]['thumbnail']['thumbnail'][7:]
+            # check to see if the listing after was not skipped
+            check_flag = True
+            x = 0
+            while check_flag == True:
+                if current_time < current_sales[x]['sold_at']:
+                    x += 1
+                    current_time = current_sales[x]['sold_at']
+                    print("Older listing is more recent")
+                else:
+                    check_flag = False
+            
+            # save data for persistent data
+            pickle.dump(current_sales[x], open('last_sold.dat', 'wb'))
+
+            # setup for the string formats
+            asset = current_sales[x]['unit_name']
+            sold_price = int(float(current_sales[x]['price']) / 1000000)
+            asset_mp = current_sales[x]['marketplace']
+            asset_img_raw = current_sales[x]['thumbnail']['thumbnail'][7:]
+
             asset_img = requests.get(f"{ipfs_base}{asset_img_raw}")
             if asset_img.status_code == 200:
                 with open("image.png", 'wb') as f:
                     f.write(asset_img.content)
-            twitter.create_tweet(text="Hello World!")
+
+            # Waiting for Twitter V2 API approval
+            #twitter.create_tweet(text="Hello World!")
             #twitter.create_tweet(text=f"{asset} was purchased from {asset_mp} for the price of {ada}{millify(sold_price)}.}")
             os.remove('image.png')
-        else:
-            print("No new sales")
-        time.sleep(3)
-    
+        time.sleep(3) 
+        
 
 if __name__ == "__main__":
     main()

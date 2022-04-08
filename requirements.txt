@@ -1,0 +1,4 @@
+python-dotenv==0.20.0
+ratelimit==2.2.1
+requests==2.27.1
+tweepy==4.8.0
