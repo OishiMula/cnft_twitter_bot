@@ -74,6 +74,7 @@ def retrieve_media_id(img_raw):
 
 def compare_listings(current_listing, saved_listing):
     last_sold_saved = pickle.load(open(saved_listing, 'rb'))
+
     # This is a catch-up function, in case OpenCNFT is down and there were listings not posted
     check_flag = True
     x = 0
@@ -112,7 +113,7 @@ def main():
         first_run = False
         if last_sold_file.is_file() == False:
             current_sales = retrieve_sales()
-            pickle.dump(current_sales['items'][5], open(last_sold_file, 'wb'))
+            pickle.dump(current_sales['items'][0], open(last_sold_file, 'wb'))
 
     while running == True:
         # Check if listings were retrieved, if not, timeout in case OpenCNFT is down
@@ -122,7 +123,7 @@ def main():
             continue
         
         compare_listings(current_sales, last_sold_file)
-        time.sleep(3)
+        time.sleep(30)
         
 if __name__ == "__main__":
     main()
