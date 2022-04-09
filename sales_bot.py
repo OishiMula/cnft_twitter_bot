@@ -94,7 +94,7 @@ def main():
         first_run = False
         if last_sold_file.is_file() == False:
             current_sales = retrieve_sales(sales_endpoint)
-            pickle.dump(current_sales['items'][0], open(last_sold_file, 'wb'))
+            pickle.dump(current_sales['items'][5], open(last_sold_file, 'wb'))
 
     while running == True:
         last_tweeted =  pickle.load(open(last_sold_file, 'rb'))
@@ -134,6 +134,7 @@ def main():
                         (current_sales, page_num, num) = prev_page(sales_endpoint, page_num)
                     time.sleep(2)
                 pickle.dump(current_sales['items'][num], open(last_sold_file, 'wb'))
+                page_num = 1
                 check_flag = False
 
             else:
