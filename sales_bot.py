@@ -107,6 +107,7 @@ def main():
 
         check_flag = True
         num = 0
+        page_num = 1
         while check_flag == True:
             print(f"last tweet: {last_tweeted['unit_name']} --- current downloaded: {current_sales['items'][num]['unit_name']}")
             if int(current_sales['items'][num]['sold_at']) > int(last_tweeted['sold_at']):
@@ -134,7 +135,6 @@ def main():
                         (current_sales, page_num, num) = prev_page(sales_endpoint, page_num)
                     time.sleep(2)
                 pickle.dump(current_sales['items'][num], open(last_sold_file, 'wb'))
-                page_num = 1
                 check_flag = False
 
             else:
