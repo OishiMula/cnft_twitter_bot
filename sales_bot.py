@@ -80,8 +80,7 @@ def compare_listings(current_listing, saved_listing):
     while check_flag == True:
         if int(last_sold_saved['sold_at']) < current_listing['items'][x]['sold_at']:
             x += 1
-            new_current = current_listing['items'][x]
-            print(f"Current: {new_current['unit_name']}")
+            print(f"Current: {current_listing['items'][x]['unit_name']}")
             print("Older listing is more recent, adding.")
             time.sleep(3)
         else:
@@ -89,14 +88,18 @@ def compare_listings(current_listing, saved_listing):
                 print(f"Current: {current_listing['items'][0]['unit_name']} - pass")
             while x > 0:
                 print(f"you have {x} listings. - tweeting now")
-                #tweet_sale(current_listing['items'][x])
-                x -= 1 
+                last_sold_saved = pickle.load(open(last_sold_file, 'rb'))
+                if int(current_listing['items'][0]['sold_at']) > int(last_sold_saved['sold_at']):
+                    print(f"Ding - {current_listing['items'][x]['unit_name']}")
+                    pickle.dump(current_listing['items'][x], open(last_sold_file, 'wb'))
+                    #tweet_sale(current_listing['items'][x])
+                    x -= 1 
                 time.sleep(3)
             check_flag = False
 
-    #if int(current_listing['items'][0]['sold_at']) > int(last_sold_saved['sold_at']):
-    #    pickle.dump(current_listing['items'][0], open(saved_listing, 'wb'))
-    #    print("Ding - New sale. Tweeting now.")
+    if int(current_listing['items'][0]['sold_at']) > int(last_sold_saved['sold_at']):
+        pickle.dump(current_listing['items'][0], open(saved_listing, 'wb'))
+        print(f"Ding - New sale. Tweeting now.  {current_listing['items'][0]['unit_name']}")
         #tweet_sale(current_listing['items'][0])
 
 @limits(calls=30, period=MINUTE)
@@ -109,7 +112,7 @@ def main():
         first_run = False
         if last_sold_file.is_file() == False:
             current_sales = retrieve_sales()
-            pickle.dump(current_sales['items'][0], open(last_sold_file, 'wb'))
+            pickle.dump(current_sales['items'][5], open(last_sold_file, 'wb'))
 
     while running == True:
         # Check if listings were retrieved, if not, timeout in case OpenCNFT is down
@@ -117,9 +120,9 @@ def main():
         if current_sales == None:
             time.sleep(120)
             continue
-
+        
         compare_listings(current_sales, last_sold_file)
-        time.sleep(30)
+        time.sleep(3)
         
 if __name__ == "__main__":
     main()
