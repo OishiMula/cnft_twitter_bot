@@ -75,7 +75,7 @@ def retrieve_media_id(img_raw):
 def compare_listings(current_listing, saved_listing):
     last_sold_saved = pickle.load(open(saved_listing, 'rb'))
 
-    # This is a catch-up function, in case OpenCNFT is down and there were listings not posted.
+    # This is a catch-up function, in case OpenCNFT is down and there were listings not posted
     check_flag = True
     x = 0
     while check_flag == True:
@@ -105,7 +105,7 @@ def main():
     global first_run
     global running
 
-    # Upon starting, it will check for a last_sold csve. If none exist, it will enter the most recent sale to begin the monitor.
+    # Upon starting, it will check for a last_sold file. If none exist, it will enter the most recent sale to begin the monitor.
     if first_run == True:
         first_run = False
         if last_sold_file.is_file() == False:
