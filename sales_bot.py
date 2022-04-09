@@ -96,7 +96,7 @@ def compare_listings(current_listing, saved_listing):
             check_flag = False
 
     if int(current_listing['items'][0]['sold_at']) > int(last_sold_saved['sold_at']):
-        pickle.dump(current_listing[0], open(saved_listing, 'wb'))
+        pickle.dump(current_listing['items'][0], open(saved_listing, 'wb'))
         print("Ding - New sale. Tweeting now.")
         #tweet_sale(current_listing['items'][0])
 
