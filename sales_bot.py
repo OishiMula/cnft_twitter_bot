@@ -3,7 +3,6 @@
 # All rights reserved.
 # This source code is licensed under the MIT-style license found in the
 # LICENSE file in the root directory of this source tree. 
-import math
 import os
 import pickle
 import time
@@ -12,6 +11,7 @@ from pathlib import Path
 import requests
 import tweepy
 from dotenv import load_dotenv
+from pycoingecko import CoinGeckoAPI
 from ratelimit import limits
 
 load_dotenv()
@@ -34,17 +34,10 @@ sales_endpoint = f"https://api.opencnft.io/1/policy/{os.getenv('elmatador')}/tra
 first_run = True
 last_sold_file = Path('last_sold.dat')
 
+cg = CoinGeckoAPI()
 running = True
 MINUTE = 60
 ada = '₳'
-
-millnames = ['',' K',' M',' B',' T']
-def millify(n):
-    n = float(n)
-    millidx = max(0,min(len(millnames)-1,
-                        int(math.floor(0 if n == 0 else math.log10(abs(n))/3))))
-
-    return '{:.0f}{}'.format(n / 10**(3 * millidx), millnames[millidx])
 
 # The function to retrieve the JSON listings
 def retrieve_sales(sales_endpoint):
@@ -69,8 +62,9 @@ def tweet_sale(listing):
     asset_mp = listing['marketplace']
     asset_img_raw = listing['thumbnail']['thumbnail'][7:]
     asset_media_id = retrieve_media_id(asset_img_raw)
+    usd = cg.get_price(ids='cardano', vs_currencies='usd')
 
-    twitter.update_status(status=f"{asset} was purchased from {asset_mp} for the price of {ada}{millify(sold_price)}.", media_ids=[asset_media_id.media_id])
+    twitter.update_status(status=f"{asset} was purchased from {asset_mp} for the price of {ada}{sold_price:,} (${(usd['cardano']['usd'] * sold_price):,.2f}).", media_ids=[asset_media_id.media_id])
     os.remove('image.png')
 
 def retrieve_media_id(img_raw):
@@ -109,7 +103,12 @@ def main():
         num = 0
         page_num = 1
         while check_flag == True:
-            print(f"last tweet: {last_tweeted['unit_name']} --- current downloaded: {current_sales['items'][num]['unit_name']}")
+            try:
+                print(f"last tweet: {last_tweeted['unit_name']} --- current downloaded: {current_sales['items'][num]['unit_name']}")
+            except TypeError:
+                time.sleep(120)
+                break
+            
             if int(current_sales['items'][num]['sold_at']) > int(last_tweeted['sold_at']):
                 print(f"Listing #{num} - {current_sales['items'][num]['unit_name']} is newer then {last_tweeted['unit_name']}. Checking next listing ")
                 num += 1
