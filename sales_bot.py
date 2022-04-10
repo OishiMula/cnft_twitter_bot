@@ -35,7 +35,6 @@ first_run = True
 last_sold_file = Path('last_sold.dat')
 
 cg = CoinGeckoAPI()
-running = True
 MINUTE = 60
 ada = '₳'
 
@@ -63,7 +62,15 @@ def tweet_sale(listing):
     asset_mp = listing['marketplace']
     asset_img_raw = listing['thumbnail']['thumbnail'][7:]
     asset_media_id = retrieve_media_id(asset_img_raw)
-    usd = cg.get_price(ids='cardano', vs_currencies='usd')
+    
+    # Making exception incase CoinGecko is having issues
+    while True:
+        try:
+            usd = cg.get_price(ids='cardano', vs_currencies='usd')
+            break
+        except requests.exceptions.RequestException:
+            time.sleep(15)
+            pass
 
     twitter.update_status(status=f"{asset} was purchased from {asset_mp} for the price of {ada}{sold_price:,} (${(usd['cardano']['usd'] * sold_price):,.2f}).", media_ids=[asset_media_id.media_id])
     os.remove('image.png')
@@ -81,7 +88,6 @@ def retrieve_media_id(img_raw):
 @limits(calls=30, period=MINUTE)
 def main():
     global first_run
-    global running
     global page_num
 
     # Upon starting, it will check for a last_sold file. If none exist, it will enter the most recent sale to begin the monitor.
@@ -91,7 +97,7 @@ def main():
             current_sales = retrieve_sales(sales_endpoint)
             pickle.dump(current_sales['items'][0], open(last_sold_file, 'wb'))
 
-    while running == True:
+    while True:
         last_tweeted =  pickle.load(open(last_sold_file, 'rb'))
 
         # Check if listings were retrieved, if not, timeout in case OpenCNFT is down
@@ -144,7 +150,6 @@ def main():
             # If there was nothing new - skip to end.
             else:
                 check_flag = False
-                print("Passing")  
 
         time.sleep(30)
         
