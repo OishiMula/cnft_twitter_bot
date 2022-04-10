@@ -141,7 +141,7 @@ def main():
                 check_flag = False
                 print("Passing")  
 
-        time.sleep(30)
+        time.sleep(3)
         
 if __name__ == "__main__":
     main()
