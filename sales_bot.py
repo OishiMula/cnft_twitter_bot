@@ -16,7 +16,7 @@ from ratelimit import limits
 
 load_dotenv()
 
-# Creating the Twitter tweepy connection for V1.1 (media_upload) -- waiting for approval
+# Creating the Twitter tweepy connection for V1.1 (media_upload)
 twitter_v1_1_auth = tweepy.OAuth1UserHandler(
     consumer_key=os.getenv('consumer_key'),
     consumer_secret=os.getenv('consumer_secret'),
@@ -56,6 +56,7 @@ def prev_page(sales_endpoint, page_num):
     sales_endpoint = f"https://api.opencnft.io/1/policy/{os.getenv('elmatador')}/transactions?page={page_num}&order=date"
     return retrieve_sales(sales_endpoint), page_num, num
 
+# Creating a payload message to tweet
 def tweet_sale(listing):
     asset = listing['unit_name']
     sold_price = int(float(listing['price']) / 1000000)
@@ -103,12 +104,15 @@ def main():
         num = 0
         page_num = 1
         while check_flag == True:
+            # Another check in case OpenCNFT is down
             try:
                 print(f"last tweet: {last_tweeted['unit_name']} --- current downloaded: {current_sales['items'][num]['unit_name']}")
             except TypeError:
                 time.sleep(120)
                 break
             
+            # Check the listing downloaded and compare to what was last tweeted
+            # If downloaded listing is newer, check the next listing / page
             if int(current_sales['items'][num]['sold_at']) > int(last_tweeted['sold_at']):
                 print(f"Listing #{num} - {current_sales['items'][num]['unit_name']} is newer then {last_tweeted['unit_name']}. Checking next listing ")
                 num += 1
@@ -119,6 +123,7 @@ def main():
                     (current_sales, page_num) = next_page(sales_endpoint, page_num)
                 time.sleep(1)
 
+            # If there were new listings, begin to tweet them from oldest to newest.
             elif num > 0 or num == 19:
                 if page_num > 1:
                     total_listings = (page_num - 1) * 19 + num
@@ -136,11 +141,12 @@ def main():
                 pickle.dump(current_sales['items'][num], open(last_sold_file, 'wb'))
                 check_flag = False
 
+            # If there was nothing new - skip to end.
             else:
                 check_flag = False
                 print("Passing")  
 
-        time.sleep(3)
+        time.sleep(30)
         
 if __name__ == "__main__":
     main()
