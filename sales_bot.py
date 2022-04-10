@@ -136,7 +136,7 @@ def main():
                 else:
                     total_listings = num
 
-                print(f"Found: {total_listings} listings. Beginning to tweet.")
+                print(f"Found: {total_listings} listing{'' if total_listings == 1 else 's'}. Beginning to tweet.")
                 while num > 0 or page_num > 1:
                     num -= 1
                     print(f"Tweeting: {current_sales['items'][num]['unit_name']}")
