@@ -23,20 +23,25 @@ logging.basicConfig(
 )
 
 # Creating the Twitter tweepy connection for V1.1 (media_upload)
-twitter_v1_1_auth = tweepy.OAuth1UserHandler(
+twitter_auth = tweepy.OAuth1UserHandler(
     consumer_key=os.getenv('consumer_key'),
     consumer_secret=os.getenv('consumer_secret'),
     access_token=os.getenv('access_token'),
     access_token_secret=os.getenv('access_token_secret')
 )
 
-twitter = tweepy.API(twitter_v1_1_auth)
+twitter = tweepy.API(
+    twitter_auth,
+    retry_count = 5,
+    retry_delay = 10,
+    wait_on_rate_limit=True
+)
 
 # Project name, file to store last tweeted information, OpenCNFT endpoint
 project = "El Matador"
 last_tweeted_file = Path('last_sold.dat')
 page_num = 1
-opencnft_api = f"https://api.opencnft.io/1/policy/{os.getenv('elmatador')}/transactions?page={page_num}&order=date"
+opencnft_api = f"https://api.opencnft.io/1/policy/{os.getenv('project')}/transactions?page={page_num}&order=date"
 
 cg = CoinGeckoAPI()
 MINUTE = 60
@@ -49,19 +54,19 @@ def retrieve_sales(url):
         if opencnft_response.status_code == 200:
             return opencnft_response.json()
     except requests.exceptions.RequestException as e:
-        logging.error(e)
+        logging.error("Endpoint failure - going to sleep.")
         time.sleep(300)
         return None
 
 def next_page(opencnft_api, page_num):
     page_num += 1
-    opencnft_api = f"https://api.opencnft.io/1/policy/{os.getenv('elmatador')}/transactions?page={page_num}&order=date"
+    opencnft_api = f"https://api.opencnft.io/1/policy/{os.getenv('project')}/transactions?page={page_num}&order=date"
     return retrieve_sales(opencnft_api), page_num
 
 def prev_page(opencnft_api, page_num):
     page_num -= 1
     num = 19
-    opencnft_api = f"https://api.opencnft.io/1/policy/{os.getenv('elmatador')}/transactions?page={page_num}&order=date"
+    opencnft_api = f"https://api.opencnft.io/1/policy/{os.getenv('project')}/transactions?page={page_num}&order=date"
     return retrieve_sales(opencnft_api), page_num, num
 
 # Creating a payload message to tweet
@@ -81,7 +86,7 @@ def tweet_sale(listing):
             break
         except (requests.exceptions.RequestException, tweepy.TweepyException) as e:
             logging.error(e)
-            time.sleep(15)
+            time.sleep(120)
             continue
 
 def retrieve_media_id(img_raw):
