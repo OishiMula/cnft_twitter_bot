@@ -3,6 +3,7 @@
 # All rights reserved.
 # This source code is licensed under the MIT-style license found in the
 # LICENSE file in the root directory of this source tree. 
+import logging
 import os
 import pickle
 import time
@@ -15,6 +16,11 @@ from pycoingecko import CoinGeckoAPI
 from ratelimit import limits
 
 load_dotenv()
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M'
+)
 
 # Creating the Twitter tweepy connection for V1.1 (media_upload)
 twitter_v1_1_auth = tweepy.OAuth1UserHandler(
@@ -26,34 +32,37 @@ twitter_v1_1_auth = tweepy.OAuth1UserHandler(
 
 twitter = tweepy.API(twitter_v1_1_auth)
 
-# OpenCNFT endpoint for sales on selected Policy ID
+# Project name, file to store last tweeted information, OpenCNFT endpoint
+project = "El Matador"
+last_tweeted_file = Path('last_sold.dat')
 page_num = 1
-sales_endpoint = f"https://api.opencnft.io/1/policy/{os.getenv('elmatador')}/transactions?page={page_num}&order=date"
-
-# Creating a first run to see if the file to store last transaciton is made
-first_run = True
-last_sold_file = Path('last_sold.dat')
+opencnft_api = f"https://api.opencnft.io/1/policy/{os.getenv('elmatador')}/transactions?page={page_num}&order=date"
 
 cg = CoinGeckoAPI()
 MINUTE = 60
 ada = '₳'
 
 # The function to retrieve the JSON listings
-def retrieve_sales(sales_endpoint):
-    response_API = requests.get(f'{sales_endpoint}')
-    if response_API.status_code == 200: return response_API.json()
-    else: return None
+def retrieve_sales(url):
+    try:
+        opencnft_response = requests.get(f'{url}')
+        if opencnft_response.status_code == 200:
+            return opencnft_response.json()
+    except requests.exceptions.RequestException as e:
+        logging.error(e)
+        time.sleep(300)
+        return None
 
-def next_page(sales_endpoint, page_num):
+def next_page(opencnft_api, page_num):
     page_num += 1
-    sales_endpoint = f"https://api.opencnft.io/1/policy/{os.getenv('elmatador')}/transactions?page={page_num}&order=date"
-    return retrieve_sales(sales_endpoint), page_num
+    opencnft_api = f"https://api.opencnft.io/1/policy/{os.getenv('elmatador')}/transactions?page={page_num}&order=date"
+    return retrieve_sales(opencnft_api), page_num
 
-def prev_page(sales_endpoint, page_num):
+def prev_page(opencnft_api, page_num):
     page_num -= 1
     num = 19
-    sales_endpoint = f"https://api.opencnft.io/1/policy/{os.getenv('elmatador')}/transactions?page={page_num}&order=date"
-    return retrieve_sales(sales_endpoint), page_num, num
+    opencnft_api = f"https://api.opencnft.io/1/policy/{os.getenv('elmatador')}/transactions?page={page_num}&order=date"
+    return retrieve_sales(opencnft_api), page_num, num
 
 # Creating a payload message to tweet
 def tweet_sale(listing):
@@ -63,17 +72,17 @@ def tweet_sale(listing):
     asset_img_raw = listing['thumbnail']['thumbnail'][7:]
     asset_media_id = retrieve_media_id(asset_img_raw)
     
-    # Making exception incase CoinGecko is having issues
+    # Making exception incase CoinGecko / Twitter are having issues
     while True:
         try:
             usd = cg.get_price(ids='cardano', vs_currencies='usd')
+            logging.info(f"{asset} - Purchased for {ada}{sold_price:,}")
+            twitter.update_status(status=f"{asset} was purchased from {asset_mp} for the price of {ada}{sold_price:,} (${(usd['cardano']['usd'] * sold_price):,.2f}).", media_ids=[asset_media_id.media_id])
             break
-        except requests.exceptions.RequestException:
+        except (requests.exceptions.RequestException, tweepy.TweepyException) as e:
+            logging.error(e)
             time.sleep(15)
-            pass
-
-    twitter.update_status(status=f"{asset} was purchased from {asset_mp} for the price of {ada}{sold_price:,} (${(usd['cardano']['usd'] * sold_price):,.2f}).", media_ids=[asset_media_id.media_id])
-    os.remove('image.png')
+            continue
 
 def retrieve_media_id(img_raw):
     ipfs_base = 'https://infura-ipfs.io/ipfs/'
@@ -81,70 +90,57 @@ def retrieve_media_id(img_raw):
     if asset_img.status_code == 200:
         with open("image.png", 'wb') as f:
             f.write(asset_img.content)
-            return twitter.media_upload("image.png")
+            media_id = twitter.media_upload("image.png")
+        os.remove('image.png')
+        return media_id
     else:
         return twitter.media_upload("404.jpg")
 
 @limits(calls=30, period=MINUTE)
 def main():
-    global first_run
-    global page_num
-
     # Upon starting, it will check for a last_sold file. If none exist, it will enter the most recent sale to begin the monitor.
-    if first_run == True:
-        first_run = False
-        if last_sold_file.is_file() == False:
-            current_sales = retrieve_sales(sales_endpoint)
-            pickle.dump(current_sales['items'][0], open(last_sold_file, 'wb'))
+    logging.info(f"Starting the {project} Twitter bot.")
+    if last_tweeted_file.is_file() == False:
+        logging.warning(f"{last_tweeted_file} not found. Creating file now.")
+        cnft_listing = retrieve_sales(opencnft_api)
+        pickle.dump(cnft_listing['items'][0], open(last_tweeted_file, 'wb'))
 
     while True:
-        last_tweeted =  pickle.load(open(last_sold_file, 'rb'))
+        last_tweeted = pickle.load(open(last_tweeted_file, 'rb'))
 
         # Check if listings were retrieved, if not, timeout in case OpenCNFT is down
-        current_sales = retrieve_sales(sales_endpoint)
-        if current_sales == None:
+        cnft_listing = retrieve_sales(opencnft_api)
+        if cnft_listing == None:
             time.sleep(120)
             continue
 
         check_flag = True
         num = 0
         page_num = 1
+        total_listings = 0
         while check_flag == True:
-            # Another check in case OpenCNFT is down
-            try:
-                print(f"last tweet: {last_tweeted['unit_name']} --- current downloaded: {current_sales['items'][num]['unit_name']}")
-            except TypeError:
-                time.sleep(120)
-                break
-            
             # Check the listing downloaded and compare to what was last tweeted
             # If downloaded listing is newer, check the next listing / page
-            if int(current_sales['items'][num]['sold_at']) > int(last_tweeted['sold_at']):
-                print(f"Listing #{num} - {current_sales['items'][num]['unit_name']} is newer then {last_tweeted['unit_name']}. Checking next listing ")
+            if int(cnft_listing['items'][num]['sold_at']) > int(last_tweeted['sold_at']):
+                total_listings += 1
+                logging.info(f"Listing #{total_listings} - {cnft_listing['items'][num]['unit_name']} is a new sale. Checking next.")
                 num += 1
-                print(f"Checking listing #{num}")
                 if num == 20:
-                    print("Retrieving more listings.")
+                    logging.info("Retrieving next page listings.")
                     num = 0
-                    (current_sales, page_num) = next_page(sales_endpoint, page_num)
+                    (cnft_listing, page_num) = next_page(opencnft_api, page_num)
                 time.sleep(1)
 
             # If there were new listings, begin to tweet them from oldest to newest.
-            elif num > 0 or num == 19:
-                if page_num > 1:
-                    total_listings = (page_num - 1) * 19 + num
-                else:
-                    total_listings = num
-
-                print(f"Found: {total_listings} listing{'' if total_listings == 1 else 's'}. Beginning to tweet.")
+            elif num > 0:
+                logging.info(f"Found {total_listings} listing{'' if total_listings == 1 else 's'}.")
                 while num > 0 or page_num > 1:
                     num -= 1
-                    print(f"Tweeting: {current_sales['items'][num]['unit_name']}")
-                    tweet_sale(current_sales['items'][num])
+                    tweet_sale(cnft_listing['items'][num])
                     if num == 0 and page_num > 1:
-                        (current_sales, page_num, num) = prev_page(sales_endpoint, page_num)
+                        (cnft_listing, page_num, num) = prev_page(opencnft_api, page_num)
                     time.sleep(2)
-                pickle.dump(current_sales['items'][num], open(last_sold_file, 'wb'))
+                pickle.dump(cnft_listing['items'][num], open(last_tweeted_file, 'wb'))
                 check_flag = False
 
             # If there was nothing new - skip to end.
